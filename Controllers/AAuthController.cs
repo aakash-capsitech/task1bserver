@@ -43,13 +43,13 @@ namespace MyMongoApp.Controllers
             var now = DateTime.UtcNow;
 
             var isDenied = await _loginRules.Find(r =>
-                r.UserIds.Contains(user.Id) &&
+                r.UserId == user.Id &&
                 r.Restriction == LoginRulesRestriction.Deny &&
-                (
-                    (r.FromDate == null || r.FromDate <= now) &&
-                    (r.ToDate == null || r.ToDate >= now)
-                )
+                (r.FromDate == null || r.FromDate <= now) &&
+                (r.ToDate == null || r.ToDate >= now)
             ).AnyAsync();
+
+
 
             if (isDenied)
             {

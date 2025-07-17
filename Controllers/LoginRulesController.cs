@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using MyMongoApp.Data;
-using MyMongoApp.Models;
 using MyMongoApp.Dtos;
+using MyMongoApp.Enums;
+using MyMongoApp.Models;
 
 namespace MyMongoApp.Controllers
 {
@@ -17,77 +19,60 @@ namespace MyMongoApp.Controllers
             _context = context;
         }
 
-        /// <summary>
-        /// Get all Login Rules
-        /// </summary>
-        /// <returns></returns>
-        // [HttpGet]
-        // public async Task<IActionResult> GetAll()
-        // {
-        //     var rules = await _context.LoginRules.Find(_ => true).ToListAsync();
 
-        //     var allUserIds = rules.SelectMany(r => r.UserIds).Distinct().ToList();
-        //     var users = await _context.Users.Find(u => allUserIds.Contains(u.Id)).ToListAsync();
-
-        //     var userIdToEmail = users.ToDictionary(u => u.Id, u => u.Email);
-
-        //     var enrichedRules = rules.Select(rule => new
-        //     {
-        //         id = rule.Id,
-        //         restriction = rule.Restriction.ToString(),
-        //         fromDate = rule.FromDate,
-        //         toDate = rule.ToDate,
-        //         userEmails = rule.UserIds.Select(id => userIdToEmail.GetValueOrDefault(id, "Unknown")).ToList()
-        //     });
-
-        //     return Ok(enrichedRules);
-        // }
-
-
-     [HttpGet]
-public async Task<IActionResult> GetAll(
+        [HttpGet]
+        public async Task<IActionResult> GetAll(
     int page = 1,
     int pageSize = 10,
     string? search = null)
-{
-    var rules = await _context.LoginRules.Find(_ => true).ToListAsync();
+        {
+            // Fetch all login rules
+            var rules = await _context.LoginRules.Find(_ => true).ToListAsync();
 
-    var allUserIds = rules.SelectMany(r => r.UserIds).Distinct().ToList();
-    var users = await _context.Users.Find(u => allUserIds.Contains(u.Id)).ToListAsync();
-    var userIdToEmail = users.ToDictionary(u => u.Id, u => u.Email);
+            // Get distinct user IDs from rules
+            var allUserIds = rules.Select(r => r.UserId).Distinct().ToList();
 
-    var enrichedRules = rules.Select(rule => new LoginRuleDto
-    {
-        Id = rule.Id,
-        Restriction = rule.Restriction.ToString(),
-        FromDate = rule.FromDate?.ToString("o"),
-        ToDate = rule.ToDate?.ToString("o"),
-        UserEmails = rule.UserIds
-            .Select(id => userIdToEmail.GetValueOrDefault(id, "Unknown"))
-            .ToList()
-    });
+            // Fetch users corresponding to those user IDs
+            var users = await _context.Users.Find(u => allUserIds.Contains(u.Id)).ToListAsync();
 
-    // 🔍 Search filtering (on email)
-    if (!string.IsNullOrWhiteSpace(search))
-    {
-        enrichedRules = enrichedRules
-            .Where(r => r.UserEmails.Any(email =>
-                email.Contains(search, StringComparison.OrdinalIgnoreCase)));
-    }
+            // Create a dictionary mapping user ID to email
+            var userIdToEmail = users.ToDictionary(u => u.Id, u => u.Email);
 
-    // 📄 Pagination
-    var total = enrichedRules.Count();
-    var paginated = enrichedRules
-        .Skip((page - 1) * pageSize)
-        .Take(pageSize)
-        .ToList();
+            // Project enriched rules with email included
+            var enrichedRules = rules.Select(rule => new LoginRuleDto
+            {
+                Id = rule.Id,
+                Restriction = rule.Restriction.ToString(),
+                FromDate = rule.FromDate?.ToString("o"),
+                ToDate = rule.ToDate?.ToString("o"),
+                UserEmail = userIdToEmail.GetValueOrDefault(rule.UserId, "Unknown")
+            });
 
-    return Ok(new
-    {
-        total,
-        rules = paginated
-    });
-}
+            // Filter by email search if provided
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                enrichedRules = enrichedRules
+                    .Where(r => r.UserEmail.Contains(search, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Materialize to list
+            var list = enrichedRules.ToList();
+            var total = list.Count;
+
+            // Apply pagination
+            var paginated = list
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return Ok(new
+            {
+                total,
+                rules = paginated
+            });
+        }
+
+
 
 
 
@@ -99,33 +84,47 @@ public async Task<IActionResult> GetAll(
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateLoginRuleDto dto)
         {
-            if (dto.UserIds == null || dto.UserIds.Count == 0)
+            if (string.IsNullOrWhiteSpace(dto.UserId))
                 return BadRequest("At least one user must be selected.");
 
-            var rules = dto.UserIds.Select(userId => new LoginRule
+            // ✅ Fetch user info for logging
+            var user = await _context.Users.Find(u => u.Id == dto.UserId).FirstOrDefaultAsync();
+            if (user == null)
+                return NotFound("User not found.");
+
+            var rule = new LoginRule
             {
-                Id = MongoDB.Bson.ObjectId.GenerateNewId().ToString(),
-                UserIds = new List<string> { userId },
+                Id = ObjectId.GenerateNewId().ToString(),
+                UserId = dto.UserId,
                 Restriction = dto.Restriction,
                 FromDate = dto.FromDate,
                 ToDate = dto.ToDate
-            }).ToList();
+            };
 
-            await _context.LoginRules.InsertManyAsync(rules);
+            await _context.LoginRules.InsertOneAsync(rule);
 
-            var logs = rules.Select(rule => new AuditLog
+            // ✅ Insert enriched audit log
+            var log = new AuditLog
             {
-                Id = MongoDB.Bson.ObjectId.GenerateNewId().ToString(),
-                Action = "Created",
+                EntityType = AuditLogEntity.LoginRule,
                 EntityId = rule.Id,
-                Description = $"Created login rule for user {rule.UserIds.First()} with restriction {rule.Restriction}",
+                Target = new IdNameModel { Id = rule.Id, Name = user.Email }, // or user.Name if you prefer
+                Action = "Created",
+                PerformedBy = new CreatedBy
+                {
+                    Id = user.Id,
+                    Name = user.Name, // or user.Email
+                    Timestamp = DateTime.UtcNow
+                },
+                Description = $"Created login rule for user {user.Email} with restriction {rule.Restriction}",
                 Timestamp = DateTime.UtcNow
-            }).ToList();
+            };
 
-            await _context.AuditLogs.InsertManyAsync(logs);
+            await _context.AuditLogs.InsertOneAsync(log);
 
-            return Ok(rules);
+            return Ok(rule);
         }
+
 
         /// <summary>
         /// Update Login Rule
@@ -136,11 +135,11 @@ public async Task<IActionResult> GetAll(
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(string id, [FromBody] CreateLoginRuleDto dto)
         {
-            if (dto.UserIds == null || dto.UserIds.Count != 1)
+            if (dto.UserId == null)
                 return BadRequest("Update must target exactly one user per rule.");
 
             var update = Builders<LoginRule>.Update
-                .Set(r => r.UserIds, dto.UserIds)
+                .Set(r => r.UserId, dto.UserId)
                 .Set(r => r.Restriction, dto.Restriction)
                 .Set(r => r.FromDate, dto.FromDate)
                 .Set(r => r.ToDate, dto.ToDate);
@@ -150,7 +149,7 @@ public async Task<IActionResult> GetAll(
             if (result.MatchedCount == 0)
                 return NotFound();
 
-            await LogAudit("Updated", id, $"Updated login rule for user {dto.UserIds.First()} with restriction {dto.Restriction}");
+            await LogAudit("Updated", id, $"Updated login rule for user {dto.UserId} with restriction {dto.Restriction}");
 
             return NoContent();
         }

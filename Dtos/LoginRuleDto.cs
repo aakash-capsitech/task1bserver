@@ -4,5 +4,6 @@ public class LoginRuleDto
     public string Restriction { get; set; } = null!;
     public string? FromDate { get; set; }
     public string? ToDate { get; set; }
-    public List<string> UserEmails { get; set; } = new();
+    public string UserEmail { get; set; } = "Unknown";
+
 }

@@ -45,30 +45,80 @@ namespace MyMongoApp.Controllers
             return Ok(quote.Id);
         }
 
-
-
-        //[HttpPost]
-        //public async Task<IActionResult> CreateQuote([FromBody] JsonElement json)
+        //[HttpPost("calc")]
+        //public IActionResult CalculateQuote([FromBody] dynamic request)
         //{
-        //    try
-        //    {
-        //        var quote = JsonSerializer.Deserialize<Quote>(json.GetRawText(), new JsonSerializerOptions
-        //        {
-        //            PropertyNameCaseInsensitive = true
-        //        });
+        //    var services = ((JsonElement)request.services).EnumerateArray();
+        //    var discountPercentage = ((JsonElement)request.discountPercentage).GetDecimal();
+        //    var vatPercentage = ((JsonElement)request.vatPercentage).GetDecimal();
 
-        //        if (quote is null)
-        //            return BadRequest("Invalid quote payload.");
+        //    // Calculate subtotal from services
+        //    var subtotal = 0m;
+        //    //foreach (var service in services)
+        //    //{
+        //    //    subtotal += service.GetProperty("amount").GetDecimal();
+        //    //}
 
-        //        await _context.Quotes.InsertOneAsync(quote);
-        //        return Ok(quote.Id);
-        //    }
-        //    catch (Exception ex)
+        //    // Calculate discount amount
+        //    var discountAmount = subtotal * (discountPercentage / 100);
+
+        //    // Calculate VAT amount (applied after discount)
+        //    var vatAmount = (subtotal - discountAmount) * (vatPercentage / 100);
+
+        //    // Calculate total
+        //    var total = subtotal - discountAmount + vatAmount;
+
+        //    var result = new
         //    {
-        //        // Optional: log error
-        //        return BadRequest(new { error = "Could not parse quote", detail = ex.Message });
-        //    }
+        //        Subtotal = Math.Round(subtotal, 2),
+        //        DiscountAmount = Math.Round(discountAmount, 2),
+        //        VatAmount = Math.Round(vatAmount, 2),
+        //        Total = Math.Round(total, 2)
+        //    };
+
+        //    return Ok(result);
         //}
+
+
+        [HttpPost("calc")]
+        public IActionResult CalculateQuote([FromBody] JsonElement request)
+        {
+            var servicesElement = request.GetProperty("services");
+            var discountPercentage = request.GetProperty("discountPercentage").GetDecimal();
+            var vatPercentage = request.GetProperty("vatPercentage").GetDecimal();
+
+            decimal subtotal = 0m;
+
+            foreach (var service in servicesElement.EnumerateArray())
+            {
+                if (service.TryGetProperty("amount", out var amountProperty) &&
+                    amountProperty.TryGetDecimal(out var amount))
+                {
+                    subtotal += amount;
+                }
+            }
+
+            // Calculate discount amount
+            var discountAmount = subtotal * (discountPercentage / 100);
+
+            // Calculate VAT amount (applied after discount)
+            var vatAmount = (subtotal - discountAmount) * (vatPercentage / 100);
+
+            // Calculate total
+            var total = subtotal - discountAmount + vatAmount;
+
+            var result = new
+            {
+                Subtotal = Math.Round(subtotal, 2),
+                DiscountAmount = Math.Round(discountAmount, 2),
+                VatAmount = Math.Round(vatAmount, 2),
+                Total = Math.Round(total, 2)
+            };
+
+            return Ok(result);
+        }
+
+
 
 
         [HttpGet]
