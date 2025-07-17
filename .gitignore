@@ -1,0 +1,71 @@
+## Ignore Visual Studio temporary files, build results, and
+## user-specific files
+
+# Build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+*.log
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Mono Auto Generated Files
+mono_crash.*
+
+# Rider settings
+.idea/
+
+# Visual Studio Code settings
+.vscode/
+
+# ASP.NET temporary files
+**/App_Data/
+**/App_Start/
+**/Properties/launchSettings.json
+
+# .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# NuGet packages
+*.nupkg
+packages/
+*.snupkg
+
+# Include if using Paket
+.paket/
+paket-files/
+
+# DotCover
+*.dotCover
+
+# JetBrains Rider
+.idea/
+
+# Windows image file caches
+Thumbs.db
+ehthumbs.db
+
+# Web server
+*.pid
+*.log
+
+# Publish directory
+publish/
+
+# Others
+*.DS_Store
+*.orig
+
+# Sensitive files
+appsettings.json
+appsettings.*.json
+secrets.json
+
+# Crash dumps
+*.dmp
