@@ -67,5 +67,9 @@ appsettings.json
 appsettings.*.json
 secrets.json
 
+TaskServer/.vs/
+.vs/
+
+
 # Crash dumps
 *.dmp
