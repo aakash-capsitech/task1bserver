@@ -1,13 +1,15 @@
-using Microsoft.AspNetCore.Mvc;
-using MyMongoApp.Data;
-using MyMongoApp.Dtos;
-using MyMongoApp.Models;
-using MongoDB.Driver;
-using MyMongoApp.Enums;
-using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using BCrypt.Net;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
 using MongoDB.Bson;
+using MongoDB.Driver;
+using MyMongoApp.Data;
+using MyMongoApp.Dtos;
+using MyMongoApp.Enums;
+using MyMongoApp.Models;
 
 namespace MyMongoApp.Controllers
 {
@@ -147,6 +149,173 @@ namespace MyMongoApp.Controllers
             return Ok(user);
         }
 
+        ///// <summary>
+        ///// Get All Users (no filters)
+        ///// </summary>
+        ///// <returns></returns>
+        //[HttpGet("all")]
+        //public async Task<IActionResult> GetAllUsers()
+        //{
+        //    var users = await _context.Users
+        //        .Find(Builders<User>.Filter.Empty)
+        //        .ToListAsync();
+
+        //    return Ok(users);
+        //}
+
+
+        //   [HttpGet("all")]
+        //   public async Task<IActionResult> GetAllUsers(
+        //int page = 1,
+        //int pageSize = 10,
+        //string? search = null,
+        //string? role = null,
+        //string? status = null)
+        //   {
+        //       var filterBuilder = Builders<User>.Filter;
+        //       var filters = new List<FilterDefinition<User>>();
+
+        //       // Apply search on name, email, phone, etc.
+        //       if (!string.IsNullOrEmpty(search))
+        //       {
+        //           var searchFilter = filterBuilder.Or(
+        //               filterBuilder.Regex(u => u.Name, new BsonRegularExpression(search, "i")),
+        //               filterBuilder.Regex(u => u.Email, new BsonRegularExpression(search, "i")),
+        //               filterBuilder.Regex(u => u.Phone, new BsonRegularExpression(search, "i"))
+        //           );
+        //           filters.Add(searchFilter);
+        //       }
+
+        //       // Role (Enum) filter
+        //       if (!string.IsNullOrEmpty(role) && Enum.TryParse<UserRole>(role, true, out var parsedRole))
+        //       {
+        //           filters.Add(filterBuilder.Eq(u => u.Role, parsedRole));
+        //       }
+
+        //       // Status (Enum) filter
+        //       if (!string.IsNullOrEmpty(status) && Enum.TryParse<UserStatus>(status, true, out var parsedStatus))
+        //       {
+        //           filters.Add(filterBuilder.Eq(u => u.status, parsedStatus));
+        //       }
+
+        //       var combinedFilter = filters.Any() ? filterBuilder.And(filters) : filterBuilder.Empty;
+
+        //       var totalCount = await _context.Users.CountDocumentsAsync(combinedFilter);
+        //       var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
+        //       var users = await _context.Users
+        //           .Find(combinedFilter)
+        //           .Skip((page - 1) * pageSize)
+        //           .Limit(pageSize)
+        //           .ToListAsync();
+
+        //       return Ok(new
+        //       {
+        //           users,
+        //           totalPages
+        //       });
+        //   }
+
+
+
+
+
+
+        /// <summary>
+        /// Get All Users with server-side pagination, search, and filtering
+        /// </summary>
+        [HttpGet("all")]
+        public async Task<IActionResult> GetAllUsers(
+            int page = 1,
+            int pageSize = 10,
+            string? search = null,
+            string? role = null,
+            string? status = null)
+        {
+            var filterBuilder = Builders<User>.Filter;
+            var filters = new List<FilterDefinition<User>>();
+
+            // Search on name, email, phone
+            if (!string.IsNullOrEmpty(search))
+            {
+                var searchFilter = filterBuilder.Or(
+                    filterBuilder.Regex(u => u.Name, new BsonRegularExpression(search, "i")),
+                    filterBuilder.Regex(u => u.Email, new BsonRegularExpression(search, "i")),
+                    filterBuilder.Regex(u => u.Phone, new BsonRegularExpression(search, "i"))
+                );
+                filters.Add(searchFilter);
+            }
+
+            // Role (Enum) filter
+            if (!string.IsNullOrEmpty(role) && Enum.TryParse<UserRole>(role, true, out var parsedRole))
+            {
+                filters.Add(filterBuilder.Eq(u => u.Role, parsedRole));
+            }
+
+            // Status filter (parse string to enum)
+            if (!string.IsNullOrEmpty(status) && Enum.TryParse<UserStatus>(status, true, out var parsedStatus))
+            {
+                filters.Add(filterBuilder.Eq(u => u.status, parsedStatus));
+            }
+
+            var combinedFilter = filters.Any() ? filterBuilder.And(filters) : filterBuilder.Empty;
+
+            var totalCount = await _context.Users.CountDocumentsAsync(combinedFilter);
+            var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
+            var users = await _context.Users
+                .Find(combinedFilter)
+                .Skip((page - 1) * pageSize)
+                .Limit(pageSize)
+                .ToListAsync();
+
+            return Ok(new
+            {
+                users,
+                totalPages
+            });
+        }
+
+
+
+
+
+        /// <summary>
+        /// Restore a soft-deleted user
+        /// </summary>
+        [HttpPut("{id}/restore")]
+        public async Task<IActionResult> RestoreUser(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+                return BadRequest("ID cannot be null or empty.");
+
+            if (!ObjectId.TryParse(id, out var objectId))
+            {
+                return BadRequest("Invalid user ID format.");
+            }
+
+            var filter = Builders<User>.Filter.Eq(u => u.Id, id); // use string id since your Id is string
+            var update = Builders<User>.Update.Set(u => u.status, UserStatus.Active);
+
+            var result = await _context.Users.UpdateOneAsync(filter, update);
+
+            if (result.MatchedCount == 0)
+                return NotFound("User not found.");
+
+            return Ok("User restored successfully.");
+        }
+
+
+
+
+
+
+
+
+
+
+
+
         /// <summary>
         /// Get Filtered Users
         /// </summary>
@@ -202,6 +371,11 @@ namespace MyMongoApp.Controllers
 
             return Ok(new { total, users });
         }
+
+
+
+
+
 
         /// <summary>
         /// Delete User
