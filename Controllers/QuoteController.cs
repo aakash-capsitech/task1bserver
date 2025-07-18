@@ -45,40 +45,6 @@ namespace MyMongoApp.Controllers
             return Ok(quote.Id);
         }
 
-        //[HttpPost("calc")]
-        //public IActionResult CalculateQuote([FromBody] dynamic request)
-        //{
-        //    var services = ((JsonElement)request.services).EnumerateArray();
-        //    var discountPercentage = ((JsonElement)request.discountPercentage).GetDecimal();
-        //    var vatPercentage = ((JsonElement)request.vatPercentage).GetDecimal();
-
-        //    // Calculate subtotal from services
-        //    var subtotal = 0m;
-        //    //foreach (var service in services)
-        //    //{
-        //    //    subtotal += service.GetProperty("amount").GetDecimal();
-        //    //}
-
-        //    // Calculate discount amount
-        //    var discountAmount = subtotal * (discountPercentage / 100);
-
-        //    // Calculate VAT amount (applied after discount)
-        //    var vatAmount = (subtotal - discountAmount) * (vatPercentage / 100);
-
-        //    // Calculate total
-        //    var total = subtotal - discountAmount + vatAmount;
-
-        //    var result = new
-        //    {
-        //        Subtotal = Math.Round(subtotal, 2),
-        //        DiscountAmount = Math.Round(discountAmount, 2),
-        //        VatAmount = Math.Round(vatAmount, 2),
-        //        Total = Math.Round(total, 2)
-        //    };
-
-        //    return Ok(result);
-        //}
-
 
         [HttpPost("calc")]
         public IActionResult CalculateQuote([FromBody] JsonElement request)
@@ -192,7 +158,8 @@ namespace MyMongoApp.Controllers
                 q.VatPercentage,
                 q.Subtotal,
                 q.VatAmount,
-                q.Total
+                q.Total,
+                q.Services
             };
         }).ToList();
 
@@ -202,6 +169,24 @@ namespace MyMongoApp.Controllers
             quotes = result
         });
         }
+
+
+
+
+
+
+        //[HttpGet("{id}/pdf")]
+        //public IActionResult DownloadQuotePdf(string id)
+        //{
+        //    var quote = _quotesCollection.Find(q => q.Id == id).FirstOrDefault();
+        //    if (quote == null)
+        //        return NotFound();
+
+        //    var pdfBytes = _pdfService.GeneratePdf(quote); // Implement this method using a library like iTextSharp or QuestPDF
+
+        //    return File(pdfBytes, "application/pdf", $"Quote_{quote.Id}.pdf");
+        //}
+
 
     }
 }
