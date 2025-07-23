@@ -86,106 +86,86 @@ namespace MyMongoApp.Controllers
 
 
 
-
         [HttpGet]
         public async Task<IActionResult> GetAll(
-        int page = 1,
-        int pageSize = 10,
-        string? search = null,
-        string? team = null)
+            int page = 1,
+            int pageSize = 10,
+            string? search = null,
+            string? team = null)
         {
-        var quoteFilter = Builders<Quote>.Filter.Empty;
-        var filters = new List<FilterDefinition<Quote>>();
+            var quoteFilter = Builders<Quote>.Filter.Empty;
+            var filters = new List<FilterDefinition<Quote>>();
 
-        if (!string.IsNullOrWhiteSpace(team))
-        {
-            filters.Add(Builders<Quote>.Filter.Eq(q => q.FirstResponseTeam, team));
-        }
+            if (!string.IsNullOrWhiteSpace(team))
+            {
+                filters.Add(Builders<Quote>.Filter.Eq(q => q.FirstResponseTeam, team));
+            }
 
-        // Apply quote filters
-        if (filters.Count > 0)
-            quoteFilter = Builders<Quote>.Filter.And(filters);
+            if (filters.Count > 0)
+                quoteFilter = Builders<Quote>.Filter.And(filters);
 
-        // Get matching quotes
-        var quotes = await _context.Quotes
-            .Find(quoteFilter)
-            .Skip((page - 1) * pageSize)
-            .Limit(pageSize)
-            .ToListAsync();
+            // Get matching quotes
+            var quotes = await _context.Quotes
+                .Find(quoteFilter)
+                .Skip((page - 1) * pageSize)
+                .Limit(pageSize)
+                .ToListAsync();
 
-        var total = await _context.Quotes.CountDocumentsAsync(quoteFilter);
+            var total = await _context.Quotes.CountDocumentsAsync(quoteFilter);
 
-        // Get all unique businessIds involved in the quotes
-        var businessIds = quotes.Select(q => q.BusinessId).Distinct().ToList();
+            // Get unique BusinessIds
+            var businessIds = quotes
+                .Select(q => q.BusinessId)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .Distinct()
+                .ToList();
 
-        // Fetch business info
-        var businesses = await _context.Businesses
-            .Find(b => businessIds.Contains(b.Id))
-            .ToListAsync();
+            // Fetch related businesses
+            var businesses = await _context.Businesses
+                .Find(b => businessIds.Contains(b.Id))
+                .ToListAsync();
 
-        // Optional in-memory search
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var searchLower = search.ToLower();
+            // Optional in-memory search
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var searchLower = search.ToLower();
 
-            quotes = quotes.Where(q =>
+                quotes = quotes.Where(q =>
+                {
+                    var business = businesses.FirstOrDefault(b => b.Id == q.BusinessId);
+                    var nameOrNumber = business?.BusinessE?.NameOrNumber?.ToLower();
+                    return nameOrNumber != null && nameOrNumber.Contains(searchLower);
+                }).ToList();
+            }
+
+            // Final mapping
+            var result = quotes.Select(q =>
             {
                 var business = businesses.FirstOrDefault(b => b.Id == q.BusinessId);
-                var matchesBusiness =
-                    business?.Businesses.Any(be => be.NameOrNumber.ToLower().Contains(searchLower)) == true ||
-                    (business?.Contact?.FirstName?.ToLower().Contains(searchLower) ?? false) ||
-                    (business?.Contact?.LastName?.ToLower().Contains(searchLower) ?? false) ||
-                    (business?.Contact?.Emails?.Any(e => e.Value.ToLower().Contains(searchLower)) ?? false) ||
-                    (business?.Contact?.PhoneNumbers?.Any(p => p.Value.ToLower().Contains(searchLower)) ?? false);
+                var businessName = business?.BusinessE?.NameOrNumber ?? "(Deleted)";
 
-                return matchesBusiness;
+                return new
+                {
+                    q.Id,
+                    BusinessName = businessName,
+                    q.FirstResponseTeam,
+                    q.Date,
+                    q.DiscountPercentage,
+                    q.VatPercentage,
+                    q.Subtotal,
+                    q.VatAmount,
+                    q.Total,
+                    q.Services
+                };
             }).ToList();
-        }
 
-        // Return mapped result
-        var result = quotes.Select(q =>
-        {
-            var business = businesses.FirstOrDefault(b => b.Id == q.BusinessId);
-            var businessName = business?.Businesses.FirstOrDefault()?.NameOrNumber ?? "(Deleted)";
-
-            return new
+            return Ok(new
             {
-                q.Id,
-                BusinessName = businessName,
-                q.FirstResponseTeam,
-                q.Date,
-                q.DiscountPercentage,
-                q.VatPercentage,
-                q.Subtotal,
-                q.VatAmount,
-                q.Total,
-                q.Services
-            };
-        }).ToList();
-
-        return Ok(new
-        {
-            total,
-            quotes = result
-        });
+                total,
+                quotes = result
+            });
         }
 
-
-
-
-
-
-        //[HttpGet("{id}/pdf")]
-        //public IActionResult DownloadQuotePdf(string id)
-        //{
-        //    var quote = _quotesCollection.Find(q => q.Id == id).FirstOrDefault();
-        //    if (quote == null)
-        //        return NotFound();
-
-        //    var pdfBytes = _pdfService.GeneratePdf(quote); // Implement this method using a library like iTextSharp or QuestPDF
-
-        //    return File(pdfBytes, "application/pdf", $"Quote_{quote.Id}.pdf");
-        //}
 
 
     }

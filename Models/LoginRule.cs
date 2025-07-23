@@ -10,6 +10,7 @@ namespace MyMongoApp.Models
         [BsonRepresentation(BsonType.ObjectId)]
         public string Id { get; set; } = string.Empty;
 
+        [BsonRepresentation(BsonType.ObjectId)]
         public string UserId { get; set; } = string.Empty;
         public LoginRulesRestriction Restriction { get; set; } = LoginRulesRestriction.Unknown;
         public DateTime? FromDate { get; set; }

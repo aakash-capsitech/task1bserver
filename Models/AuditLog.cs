@@ -88,6 +88,7 @@ namespace MyMongoApp.Models
 
         public AuditLogEntity EntityType { get; set; } = AuditLogEntity.Unknown;
 
+        [BsonRepresentation(BsonType.ObjectId)]
         public string EntityId { get; set; } = string.Empty; // e.g., LoginRule ID
 
         public IdNameModel? Target { get; set; } // optional enriched info

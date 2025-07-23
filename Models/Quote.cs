@@ -12,6 +12,7 @@ namespace MyMongoApp.Models
         [BsonRepresentation(BsonType.ObjectId)]
         public string? Id { get; set; }
 
+        [BsonRepresentation(BsonType.ObjectId)]
         public string BusinessId { get; set; } = string.Empty;
 
         public DateTime Date { get; set; }

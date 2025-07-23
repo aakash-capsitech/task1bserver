@@ -26,12 +26,10 @@ namespace MyMongoApp.Data
 
         public IMongoCollection<Business> Businesses => _database.GetCollection<Business>("Businesses");
 
+        public IMongoCollection<ContactDetails> Contacts => _database.GetCollection<ContactDetails>("Contacts");
+
         public IMongoCollection<Quote> Quotes =>
         _database.GetCollection<Quote>("Quotes");
 
-
-
-        // Auth-specific users
-        // public IMongoCollection<AUser> AUsers => _database.GetCollection<AUser>("auth_users");
     }
 }

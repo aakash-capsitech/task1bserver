@@ -1,9 +1,12 @@
+using System.Collections.Generic;
 using Microsoft.AspNetCore.Mvc;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using MyMongoApp.Data;
-using MyMongoApp.Models;
 using MyMongoApp.Dtos;
 using MyMongoApp.Enums;
+using MyMongoApp.Models;
 
 
 namespace MyApp.Controllers
@@ -19,153 +22,199 @@ namespace MyApp.Controllers
             _context = context;
         }
 
+
         [HttpPost]
         public async Task<IActionResult> CreateBusiness([FromBody] BusinessDto dto)
         {
-            var business = new Business
+            // 1. Create the contact (always present)
+            // 1. Create the contact
+            var contact = new ContactDetails
             {
-                Businesses = dto.Businesses.Select(b => new BusinessEntry
-                {
-                    Type = b.Type,
-                    NameOrNumber = b.NameOrNumber,
-                    Address = b.Address == null ? null : new Address
-                    {
-                        Building = b.Address.Building,
-                        Street = b.Address.Street,
-                        City = b.Address.City,
-                        County = b.Address.County,
-                        Postcode = b.Address.Postcode,
-                        Country = b.Address.Country
-                    }
-                }).ToList(),
-                Contact = dto.Contact == null ? null : new ContactDetails
-                {
-                    FirstName = dto.Contact.FirstName,
-                    LastName = dto.Contact.LastName,
-                    Alias = dto.Contact.Alias,
-                    Designation = dto.Contact.Designation,
-                    Mode = dto.Contact.Mode,
-                    Notes = dto.Contact.Notes,
-                    PhoneNumbers = dto.Contact.PhoneNumbers.Select(p => new PhoneEntry
+                FirstName = dto.Contact.FirstName,
+                LastName = dto.Contact.LastName,
+                Alias = dto.Contact.Alias,
+                Designation = dto.Contact.Designation,
+                Mode = Enum.TryParse<ContactMode>(dto.Contact.Mode, true, out var mode) ? mode : ContactMode.Unknown,
+                Notes = dto.Contact.Notes,
+                PhoneNumbers = dto.Contact.PhoneNumbers
+                    .Where(p => p != null)
+                    .Select(p => new PhoneEntry
                     {
                         Value = p.Value,
-                        Type = p.Type
+                        Type = Enum.TryParse<ContactType>(p.Type, true, out var pType) ? pType : ContactType.Unknown
                     }).ToList(),
-                    Emails = dto.Contact.Emails.Select(e => new EmailEntry
+                Emails = dto.Contact.Emails
+                    .Where(e => e != null)
+                    .Select(e => new EmailEntry
                     {
                         Value = e.Value,
-                        Type = e.Type
+                        Type = Enum.TryParse<ContactType>(e.Type, true, out var eType) ? eType : ContactType.Unknown
                     }).ToList()
-                }
             };
 
-            await _context.Businesses.InsertOneAsync(business);
-            return Ok(business.Id);
+            await _context.Contacts.InsertOneAsync(contact);
+            var contactId = contact.Id;
+
+            // 2. Create businesses
+            var businessEntities = dto.Businesses
+                .Where(b => b != null)
+                .Select(b => new Business
+                {
+                    BusinessE = new BusinessEntry
+                    {
+                        Type = Enum.TryParse<BusinessType>(b.Type, true, out var bt) ? bt : BusinessType.Unknown,
+                        NameOrNumber = b.NameOrNumber,
+                        Address = b.Address == null ? null : new Address
+                        {
+                            Building = b.Address.Building,
+                            Street = b.Address.Street,
+                            City = b.Address.City,
+                            County = b.Address.County,
+                            Postcode = b.Address.Postcode,
+                            Country = b.Address.Country
+                        }
+                    },
+                    ContactId = contactId
+                });
+
+            await _context.Businesses.InsertManyAsync(businessEntities);
+
+
+            return Ok();
         }
 
-        // [HttpGet]
-        // public async Task<IActionResult> GetAll()
-        // {
-        //     var result = await _context.Businesses.Find(_ => true).ToListAsync();
-        //     return Ok(result);
-        // }
 
-        //         [HttpGet]
-        // public async Task<IActionResult> GetAll(
-        //     int page = 1,
-        //     int pageSize = 10,
-        //     string? search = null,
-        //     string? type = null)
-        // {
-        //     var filterBuilder = Builders<Business>.Filter;
-        //     var filters = new List<FilterDefinition<Business>>();
+        //    [HttpGet]
+        //    public async Task<IActionResult> GetAll(
+        //int page = 1,
+        //int pageSize = 10,
+        //string? search = null,
+        //string? type = null)
+        //    {
+        //        var filterBuilder = Builders<Business>.Filter;
+        //        var filters = new List<FilterDefinition<Business>>();
 
-        //     if (!string.IsNullOrEmpty(search))
-        //     {
-        //         var textFilter = filterBuilder.Or(
-        //             filterBuilder.Regex(b => b.NameOrNumber, new MongoDB.Bson.BsonRegularExpression(search, "i")),
-        //             filterBuilder.Regex("contact.firstName", new MongoDB.Bson.BsonRegularExpression(search, "i")),
-        //             filterBuilder.Regex("contact.lastName", new MongoDB.Bson.BsonRegularExpression(search, "i")),
-        //             filterBuilder.Regex("contact.emails.value", new MongoDB.Bson.BsonRegularExpression(search, "i")),
-        //             filterBuilder.Regex("contact.phoneNumbers.value", new MongoDB.Bson.BsonRegularExpression(search, "i"))
-        //         );
-        //         filters.Add(textFilter);
-        //     }
+        //        if (!string.IsNullOrEmpty(search))
+        //        {
+        //            var regex = new BsonRegularExpression(search, "i");
+        //            filters.Add(filterBuilder.Regex("businessE.nameOrNumber", regex));
+        //        }
 
-        //     if (!string.IsNullOrEmpty(type))
-        //     {
-        //         filters.Add(filterBuilder.Eq(b => b.Type, type));
-        //     }
+        //        if (!string.IsNullOrEmpty(type) &&
+        //            Enum.TryParse(type, true, out BusinessType parsedType))
+        //        {
+        //            filters.Add(filterBuilder.Eq("businessE.type", parsedType));
+        //        }
 
-        //     var finalFilter = filters.Count > 0 ? filterBuilder.And(filters) : FilterDefinition<Business>.Empty;
+        //        var finalFilter = filters.Any()
+        //            ? filterBuilder.And(filters)
+        //            : FilterDefinition<Business>.Empty;
 
-        //     var total = await _context.Businesses.CountDocumentsAsync(finalFilter);
+        //        var total = await _context.Businesses.CountDocumentsAsync(finalFilter);
 
-        //     var businesses = await _context.Businesses
-        //         .Find(finalFilter)
-        //         .Skip((page - 1) * pageSize)
-        //         .Limit(pageSize)
-        //         .ToListAsync();
+        //        var businesses = await _context.Businesses
+        //            .Find(finalFilter)
+        //            .Skip((page - 1) * pageSize)
+        //            .Limit(pageSize)
+        //            .ToListAsync();
 
-        //     return Ok(new
-        //     {
-        //         total,
-        //         businesses
-        //     });
-        // }
+        //        var contactIds = businesses
+        //            .Where(b => b.ContactId != null)
+        //            .Select(b => b.ContactId)
+        //            .Distinct()
+        //            .ToList();
 
-[HttpGet]
-public async Task<IActionResult> GetAll(
+        //        var contacts = await _context.Contacts
+        //            .Find(Builders<ContactDetails>.Filter.In(c => c.Id, contactIds))
+        //            .ToListAsync();
+
+        //        var contactMap = contacts.ToDictionary(c => c.Id, c => c);
+
+        //        var enrichedBusinesses = businesses.Select(b =>
+        //        {
+        //            var contactId = b.ContactId;
+        //            var contact = contactId != null && contactMap.ContainsKey(contactId)
+        //                ? contactMap[contactId]
+        //                : null;
+
+        //            return new
+        //            {
+        //                id = b.Id,
+        //                businessE = b.BusinessE,
+        //                contact
+        //            };
+        //        });
+
+        //        return Ok(new { total, businesses = enrichedBusinesses });
+        //    }
+
+
+        [HttpGet]
+        public async Task<IActionResult> GetAll(
     int page = 1,
     int pageSize = 10,
     string? search = null,
     string? type = null)
-{
-    var filterBuilder = Builders<Business>.Filter;
-    var filters = new List<FilterDefinition<Business>>();
-
-    if (!string.IsNullOrEmpty(search))
-    {
-        var regex = new MongoDB.Bson.BsonRegularExpression(search, "i");
-
-        filters.Add(filterBuilder.Or(
-            // Search in any business nameOrNumber
-            filterBuilder.ElemMatch(b => b.Businesses, entry =>
-                entry.NameOrNumber.ToLower().Contains(search.ToLower())),
-
-            // Contact name
-            filterBuilder.Regex("contact.firstName", regex),
-            filterBuilder.Regex("contact.lastName", regex),
-
-            // Email/phone values
-            filterBuilder.Regex("contact.emails.value", regex),
-            filterBuilder.Regex("contact.phoneNumbers.value", regex)
-        ));
-    }
-
-    if (!string.IsNullOrEmpty(type))
-    {
-        if (Enum.TryParse(type, true, out BusinessType parsedType))
         {
-            filters.Add(filterBuilder.ElemMatch(b => b.Businesses, entry =>
-                entry.Type == parsedType));
+            var filterBuilder = Builders<Business>.Filter;
+            var filters = new List<FilterDefinition<Business>>();
+
+            // Fix: Use correct casing and dot notation for nested fields
+            if (!string.IsNullOrEmpty(search))
+            {
+                var regex = new BsonRegularExpression(search, "i");
+                filters.Add(filterBuilder.Regex("BusinessE.NameOrNumber", regex));
+            }
+
+            if (!string.IsNullOrEmpty(type) &&
+                Enum.TryParse(type, true, out BusinessType parsedType))
+            {
+                filters.Add(filterBuilder.Eq("BusinessE.Type", parsedType));
+            }
+
+            var finalFilter = filters.Any()
+                ? filterBuilder.And(filters)
+                : FilterDefinition<Business>.Empty;
+
+            var total = await _context.Businesses.CountDocumentsAsync(finalFilter);
+
+            var businesses = await _context.Businesses
+                .Find(finalFilter)
+                .Skip((page - 1) * pageSize)
+                .Limit(pageSize)
+                .ToListAsync();
+
+            var contactIds = businesses
+                .Where(b => b.ContactId != null)
+                .Select(b => b.ContactId)
+                .Distinct()
+                .ToList();
+
+            var contacts = await _context.Contacts
+                .Find(Builders<ContactDetails>.Filter.In(c => c.Id, contactIds))
+                .ToListAsync();
+
+            var contactMap = contacts.ToDictionary(c => c.Id, c => c);
+
+            var enrichedBusinesses = businesses.Select(b =>
+            {
+                var contactId = b.ContactId;
+                var contact = contactId != null && contactMap.ContainsKey(contactId)
+                    ? contactMap[contactId]
+                    : null;
+
+                return new
+                {
+                    id = b.Id,
+                    businessE = b.BusinessE,
+                    contact
+                };
+            });
+
+            return Ok(new { total, businesses = enrichedBusinesses });
         }
-    }
 
-    var finalFilter = filters.Count > 0
-        ? filterBuilder.And(filters)
-        : FilterDefinition<Business>.Empty;
 
-    var total = await _context.Businesses.CountDocumentsAsync(finalFilter);
-
-    var businesses = await _context.Businesses
-        .Find(finalFilter)
-        .Skip((page - 1) * pageSize)
-        .Limit(pageSize)
-        .ToListAsync();
-
-    return Ok(new { total, businesses });
-}
 
 
     }
