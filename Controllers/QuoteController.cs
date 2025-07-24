@@ -18,10 +18,14 @@ namespace MyMongoApp.Controllers
             _context = context;
         }
 
+        /// <summary>
+        /// Create Quote
+        /// </summary>
+        /// <param name="dto"></param>
+        /// <returns></returns>
         [HttpPost]
         public async Task<IActionResult> CreateQuote([FromBody] QuoteDto dto)
         {
-            //Logger.info(dto);
             var quote = new Quote
             {
                 BusinessId = dto.BusinessId,
@@ -46,6 +50,11 @@ namespace MyMongoApp.Controllers
         }
 
 
+        /// <summary>
+        /// Calculate quote data
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
         [HttpPost("calc")]
         public IActionResult CalculateQuote([FromBody] JsonElement request)
         {
@@ -64,13 +73,10 @@ namespace MyMongoApp.Controllers
                 }
             }
 
-            // Calculate discount amount
             var discountAmount = subtotal * (discountPercentage / 100);
 
-            // Calculate VAT amount (applied after discount)
             var vatAmount = (subtotal - discountAmount) * (vatPercentage / 100);
 
-            // Calculate total
             var total = subtotal - discountAmount + vatAmount;
 
             var result = new
@@ -84,8 +90,14 @@ namespace MyMongoApp.Controllers
             return Ok(result);
         }
 
-
-
+        /// <summary>
+        /// Get Quotes with filter
+        /// </summary>
+        /// <param name="page"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="search"></param>
+        /// <param name="team"></param>
+        /// <returns></returns>
         [HttpGet]
         public async Task<IActionResult> GetAll(
             int page = 1,
@@ -104,7 +116,6 @@ namespace MyMongoApp.Controllers
             if (filters.Count > 0)
                 quoteFilter = Builders<Quote>.Filter.And(filters);
 
-            // Get matching quotes
             var quotes = await _context.Quotes
                 .Find(quoteFilter)
                 .Skip((page - 1) * pageSize)
@@ -113,19 +124,16 @@ namespace MyMongoApp.Controllers
 
             var total = await _context.Quotes.CountDocumentsAsync(quoteFilter);
 
-            // Get unique BusinessIds
             var businessIds = quotes
                 .Select(q => q.BusinessId)
                 .Where(id => !string.IsNullOrEmpty(id))
                 .Distinct()
                 .ToList();
 
-            // Fetch related businesses
             var businesses = await _context.Businesses
                 .Find(b => businessIds.Contains(b.Id))
                 .ToListAsync();
 
-            // Optional in-memory search
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var searchLower = search.ToLower();
@@ -138,7 +146,6 @@ namespace MyMongoApp.Controllers
                 }).ToList();
             }
 
-            // Final mapping
             var result = quotes.Select(q =>
             {
                 var business = businesses.FirstOrDefault(b => b.Id == q.BusinessId);
@@ -165,8 +172,5 @@ namespace MyMongoApp.Controllers
                 quotes = result
             });
         }
-
-
-
     }
 }

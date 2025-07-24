@@ -1,5 +1,3 @@
-
-
 using MongoDB.Driver;
 using MyMongoApp.Models;
 

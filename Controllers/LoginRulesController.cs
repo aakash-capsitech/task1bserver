@@ -19,62 +19,62 @@ namespace MyMongoApp.Controllers
             _context = context;
         }
 
-
+        /// <summary>
+        /// Retrieves a paginated list of login rules, enriched with user email information,  and optionally filtered by
+        /// a search term.
+        /// </summary>
+        /// <remarks>This method fetches all login rules from the database, enriches them with the
+        /// corresponding  user email addresses, and applies optional filtering and pagination. The search term, if
+        /// provided,  is used to filter login rules based on the associated user email.</remarks>
+        /// <param name="page">The page number to retrieve. Must be greater than or equal to 1. Defaults to 1.</param>
+        /// <param name="pageSize">The number of items per page. Must be greater than or equal to 1. Defaults to 10.</param>
+        /// <param name="search">An optional search term used to filter login rules by user email.  If null or empty, no filtering is
+        /// applied.</param>
+        /// <returns>An <see cref="IActionResult"/> containing a JSON object with the total count of login rules  and the
+        /// paginated list of enriched login rules.</returns>
         [HttpGet]
         public async Task<IActionResult> GetAll(
-    int page = 1,
-    int pageSize = 10,
-    string? search = null)
-        {
-            // Fetch all login rules
-            var rules = await _context.LoginRules.Find(_ => true).ToListAsync();
-
-            // Get distinct user IDs from rules
-            var allUserIds = rules.Select(r => r.UserId).Distinct().ToList();
-
-            // Fetch users corresponding to those user IDs
-            var users = await _context.Users.Find(u => allUserIds.Contains(u.Id)).ToListAsync();
-
-            // Create a dictionary mapping user ID to email
-            var userIdToEmail = users.ToDictionary(u => u.Id, u => u.Email);
-
-            // Project enriched rules with email included
-            var enrichedRules = rules.Select(rule => new LoginRuleDto
+        int page = 1,
+        int pageSize = 10,
+        string? search = null)
             {
-                Id = rule.Id,
-                Restriction = rule.Restriction.ToString(),
-                FromDate = rule.FromDate?.ToString("o"),
-                ToDate = rule.ToDate?.ToString("o"),
-                UserEmail = userIdToEmail.GetValueOrDefault(rule.UserId, "Unknown")
-            });
+                var rules = await _context.LoginRules.Find(_ => true).ToListAsync();
 
-            // Filter by email search if provided
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                enrichedRules = enrichedRules
-                    .Where(r => r.UserEmail.Contains(search, StringComparison.OrdinalIgnoreCase));
+                var allUserIds = rules.Select(r => r.UserId).Distinct().ToList();
+
+                var users = await _context.Users.Find(u => allUserIds.Contains(u.Id)).ToListAsync();
+
+                var userIdToEmail = users.ToDictionary(u => u.Id, u => u.Email);
+
+                var enrichedRules = rules.Select(rule => new LoginRuleDto
+                {
+                    Id = rule.Id,
+                    Restriction = rule.Restriction.ToString(),
+                    FromDate = rule.FromDate?.ToString("o"),
+                    ToDate = rule.ToDate?.ToString("o"),
+                    UserEmail = userIdToEmail.GetValueOrDefault(rule.UserId, "Unknown")
+                });
+
+                if (!string.IsNullOrWhiteSpace(search))
+                {
+                    enrichedRules = enrichedRules
+                        .Where(r => r.UserEmail.Contains(search, StringComparison.OrdinalIgnoreCase));
+                }
+
+                var list = enrichedRules.ToList();
+                var total = list.Count;
+
+                var paginated = list
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                return Ok(new
+                {
+                    total,
+                    rules = paginated
+                });
             }
-
-            // Materialize to list
-            var list = enrichedRules.ToList();
-            var total = list.Count;
-
-            // Apply pagination
-            var paginated = list
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToList();
-
-            return Ok(new
-            {
-                total,
-                rules = paginated
-            });
-        }
-
-
-
-
 
         /// <summary>
         /// Create Login Rules
@@ -87,7 +87,6 @@ namespace MyMongoApp.Controllers
             if (string.IsNullOrWhiteSpace(dto.UserId))
                 return BadRequest("At least one user must be selected.");
 
-            // ✅ Fetch user info for logging
             var user = await _context.Users.Find(u => u.Id == dto.UserId).FirstOrDefaultAsync();
             if (user == null)
                 return NotFound("User not found.");
@@ -103,17 +102,16 @@ namespace MyMongoApp.Controllers
 
             await _context.LoginRules.InsertOneAsync(rule);
 
-            // ✅ Insert enriched audit log
             var log = new AuditLog
             {
                 EntityType = AuditLogEntity.LoginRule,
                 EntityId = rule.Id,
-                Target = new IdNameModel { Id = rule.Id, Name = user.Email }, // or user.Name if you prefer
+                Target = new IdNameModel { Id = rule.Id, Name = user.Email },
                 Action = "Created",
                 PerformedBy = new CreatedBy
                 {
                     Id = user.Id,
-                    Name = user.Name, // or user.Email
+                    Name = user.Name,
                     Timestamp = DateTime.UtcNow
                 },
                 Description = $"Created login rule for user {user.Email} with restriction {rule.Restriction}",

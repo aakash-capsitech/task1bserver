@@ -149,10 +149,6 @@ namespace MyMongoApp.Controllers
             return Ok(user);
         }
 
-
-
-
-
         /// <summary>
         /// Get All Users with server-side pagination, search, and filtering
         /// </summary>
@@ -167,7 +163,6 @@ namespace MyMongoApp.Controllers
             var filterBuilder = Builders<User>.Filter;
             var filters = new List<FilterDefinition<User>>();
 
-            // Search on name, email, phone
             if (!string.IsNullOrEmpty(search))
             {
                 var searchFilter = filterBuilder.Or(
@@ -178,13 +173,11 @@ namespace MyMongoApp.Controllers
                 filters.Add(searchFilter);
             }
 
-            // Role (Enum) filter
             if (!string.IsNullOrEmpty(role) && Enum.TryParse<UserRole>(role, true, out var parsedRole))
             {
                 filters.Add(filterBuilder.Eq(u => u.Role, parsedRole));
             }
 
-            // Status filter (parse string to enum)
             if (!string.IsNullOrEmpty(status) && Enum.TryParse<UserStatus>(status, true, out var parsedStatus))
             {
                 filters.Add(filterBuilder.Eq(u => u.status, parsedStatus));
@@ -208,10 +201,6 @@ namespace MyMongoApp.Controllers
             });
         }
 
-
-
-
-
         /// <summary>
         /// Restore a soft-deleted user
         /// </summary>
@@ -226,7 +215,7 @@ namespace MyMongoApp.Controllers
                 return BadRequest("Invalid user ID format.");
             }
 
-            var filter = Builders<User>.Filter.Eq(u => u.Id, id); // use string id since your Id is string
+            var filter = Builders<User>.Filter.Eq(u => u.Id, id);
             var update = Builders<User>.Update.Set(u => u.status, UserStatus.Active);
 
             var result = await _context.Users.UpdateOneAsync(filter, update);
@@ -236,16 +225,6 @@ namespace MyMongoApp.Controllers
 
             return Ok("User restored successfully.");
         }
-
-
-
-
-
-
-
-
-
-
 
 
         /// <summary>
@@ -303,11 +282,6 @@ namespace MyMongoApp.Controllers
 
             return Ok(new { total, users });
         }
-
-
-
-
-
 
         /// <summary>
         /// Delete User

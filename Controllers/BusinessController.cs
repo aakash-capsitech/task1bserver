@@ -23,11 +23,14 @@ namespace MyApp.Controllers
         }
 
 
+        /// <summary>
+        /// Create Business
+        /// </summary>
+        /// <param name="dto"></param>
+        /// <returns></returns>
         [HttpPost]
         public async Task<IActionResult> CreateBusiness([FromBody] BusinessDto dto)
         {
-            // 1. Create the contact (always present)
-            // 1. Create the contact
             var contact = new ContactDetails
             {
                 FirstName = dto.Contact.FirstName,
@@ -55,7 +58,6 @@ namespace MyApp.Controllers
             await _context.Contacts.InsertOneAsync(contact);
             var contactId = contact.Id;
 
-            // 2. Create businesses
             var businessEntities = dto.Businesses
                 .Where(b => b != null)
                 .Select(b => new Business
@@ -84,17 +86,24 @@ namespace MyApp.Controllers
         }
 
 
+        /// <summary>
+        /// Get businesses with filter
+        /// </summary>
+        /// <param name="page"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="search"></param>
+        /// <param name="type"></param>
+        /// <returns></returns>
         [HttpGet]
         public async Task<IActionResult> GetAll(
-    int page = 1,
-    int pageSize = 10,
-    string? search = null,
-    string? type = null)
+        int page = 1,
+        int pageSize = 10,
+        string? search = null,
+        string? type = null)
         {
             var filterBuilder = Builders<Business>.Filter;
             var filters = new List<FilterDefinition<Business>>();
 
-            // Fix: Use correct casing and dot notation for nested fields
             if (!string.IsNullOrEmpty(search))
             {
                 var regex = new BsonRegularExpression(search, "i");
@@ -148,9 +157,5 @@ namespace MyApp.Controllers
 
             return Ok(new { total, businesses = enrichedBusinesses });
         }
-
-
-
-
     }
 }
