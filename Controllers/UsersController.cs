@@ -185,8 +185,8 @@ namespace MyMongoApp.Controllers
 
             var combinedFilter = filters.Any() ? filterBuilder.And(filters) : filterBuilder.Empty;
 
-            var totalCount = await _context.Users.CountDocumentsAsync(combinedFilter);
-            var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+            var total = await _context.Users.CountDocumentsAsync(combinedFilter);
+            var totalPages = (int)Math.Ceiling(total / (double)pageSize);
 
             var users = await _context.Users
                 .Find(combinedFilter)
@@ -197,7 +197,8 @@ namespace MyMongoApp.Controllers
             return Ok(new
             {
                 users,
-                totalPages
+                totalPages,
+                total
             });
         }
 

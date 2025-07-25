@@ -30,6 +30,8 @@ namespace MyMongoApp.Models
         public double VatAmount { get; set; }
 
         public double Total { get; set; }
+
+        public string QSID { get; set; }
     }
 
     public class ServiceLine

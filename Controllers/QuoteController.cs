@@ -26,6 +26,8 @@ namespace MyMongoApp.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateQuote([FromBody] QuoteDto dto)
         {
+
+            var qsid = await GenerateQSID();
             var quote = new Quote
             {
                 BusinessId = dto.BusinessId,
@@ -42,7 +44,8 @@ namespace MyMongoApp.Controllers
                 VatPercentage = dto.VatPercentage,
                 Subtotal = dto.Subtotal,
                 VatAmount = dto.VatAmount,
-                Total = dto.Total
+                Total = dto.Total,
+                QSID = qsid
             };
 
             await _context.Quotes.InsertOneAsync(quote);
@@ -162,7 +165,8 @@ namespace MyMongoApp.Controllers
                     q.Subtotal,
                     q.VatAmount,
                     q.Total,
-                    q.Services
+                    q.Services,
+                    q.QSID
                 };
             }).ToList();
 
@@ -171,6 +175,33 @@ namespace MyMongoApp.Controllers
                 total,
                 quotes = result
             });
+        }
+
+        /// <summary>
+        /// Generating a new QSID
+        /// </summary>
+        /// <returns></returns>
+        public async Task<string> GenerateQSID()
+        {
+            var lastQuote = await _context.Quotes.Find(Builders<Quote>.Filter.Empty)
+                .SortByDescending(q => q.QSID)
+                .Limit(1)
+                .FirstOrDefaultAsync();
+
+            int nextNumber = 1;
+
+            if (lastQuote != null && !string.IsNullOrEmpty(lastQuote.QSID))
+            {
+                var numericPart = lastQuote.QSID.Replace("Q-", "");
+                if (int.TryParse(numericPart, out int lastNumber))
+                {
+                    nextNumber = lastNumber + 1;
+                }
+            }
+
+            string newQSID = $"Q-{nextNumber:D3}";
+
+            return newQSID;
         }
     }
 }

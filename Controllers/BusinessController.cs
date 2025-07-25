@@ -52,11 +52,13 @@ namespace MyApp.Controllers
                     {
                         Value = e.Value,
                         Type = Enum.TryParse<ContactType>(e.Type, true, out var eType) ? eType : ContactType.Unknown
-                    }).ToList()
+                    }).ToList(),
             };
 
             await _context.Contacts.InsertOneAsync(contact);
             var contactId = contact.Id;
+
+            var bsid = await GenerateBSID();
 
             var businessEntities = dto.Businesses
                 .Where(b => b != null)
@@ -76,7 +78,8 @@ namespace MyApp.Controllers
                             Country = b.Address.Country
                         }
                     },
-                    ContactId = contactId
+                    ContactId = contactId,
+                    BSID = bsid
                 });
 
             await _context.Businesses.InsertManyAsync(businessEntities);
@@ -151,11 +154,39 @@ namespace MyApp.Controllers
                 {
                     id = b.Id,
                     businessE = b.BusinessE,
-                    contact
+                    contact,
+                    BSID = b.BSID
                 };
             });
 
             return Ok(new { total, businesses = enrichedBusinesses });
+        }
+
+        /// <summary>
+        /// Generating a new BSID
+        /// </summary>
+        /// <returns></returns>
+        public async Task<string> GenerateBSID()
+        {
+            var lastBusiness = await _context.Businesses.Find(Builders<Business>.Filter.Empty)
+                .SortByDescending(b => b.BSID)
+                .Limit(1)
+                .FirstOrDefaultAsync();
+
+            int nextNumber = 1;
+
+            if(lastBusiness != null && !string.IsNullOrEmpty(lastBusiness.BSID))
+            {
+                var numericPart = lastBusiness.BSID.Replace("B-", "");
+                if(int.TryParse(numericPart, out int lastNumber))
+                {
+                    nextNumber = lastNumber + 1;
+                }
+            }
+
+            string newBSID = $"B-{nextNumber:D3}";
+
+            return newBSID;
         }
     }
 }

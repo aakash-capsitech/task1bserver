@@ -17,6 +17,8 @@ namespace MyMongoApp.Models
         [BsonRepresentation(BsonType.ObjectId)]
         public string? ContactId { get; set; }
 
+        public string BSID { get; set; }
+
     }
 
 
