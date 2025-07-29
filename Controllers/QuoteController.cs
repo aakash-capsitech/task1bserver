@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
 using MyMongoApp.Data;
@@ -102,6 +103,7 @@ namespace MyMongoApp.Controllers
         /// <param name="team"></param>
         /// <returns></returns>
         [HttpGet]
+        [Authorize]
         public async Task<IActionResult> GetAll(
             int page = 1,
             int pageSize = 10,
