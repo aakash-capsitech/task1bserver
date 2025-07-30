@@ -17,12 +17,12 @@ namespace MyMongoApp.Models
         /// <summary>
         /// first name
         /// </summary>
-        public string FirstName { get; set; }
+        public string FirstName { get; set; } = string.Empty;
 
         /// <summary>
         /// last name
         /// </summary>
-        public string LastName { get; set; }
+        public string LastName { get; set; } = string.Empty;
 
         /// <summary>
         /// alias
@@ -32,7 +32,7 @@ namespace MyMongoApp.Models
         /// <summary>
         /// designation of the contact
         /// </summary>
-        public string Designation { get; set; }
+        public string Designation { get; set; } = string.Empty;
 
         /// <summary>
         /// mode of contact
@@ -42,12 +42,12 @@ namespace MyMongoApp.Models
         /// <summary>
         /// phone list
         /// </summary>
-        public List<PhoneEntry> PhoneNumbers { get; set; }
+        public List<PhoneEntry> PhoneNumbers { get; set; } = new();
 
         /// <summary>
         /// email list
         /// </summary>
-        public List<EmailEntry> Emails { get; set; }
+        public List<EmailEntry> Emails { get; set; } = new();
 
         /// <summary>
         /// notes if any

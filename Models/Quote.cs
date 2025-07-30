@@ -64,7 +64,7 @@ namespace MyMongoApp.Models
         /// <summary>
         /// an auto-increment field
         /// </summary>
-        public string QSID { get; set; }
+        public string QSID { get; set; } = "-1";
     }
 
     public class ServiceLine

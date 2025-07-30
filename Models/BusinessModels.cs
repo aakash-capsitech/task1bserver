@@ -18,7 +18,7 @@ namespace MyMongoApp.Models
         /// <summary>
         /// business details
         /// </summary>
-        public BusinessEntry BusinessE { get; set; }
+        public BusinessEntry BusinessE { get; set; } = new();
 
         /// <summary>
         /// reference to contact
@@ -29,7 +29,7 @@ namespace MyMongoApp.Models
         /// <summary>
         /// auto-incrementing, implemented in the business controller
         /// </summary>
-        public string BSID { get; set; }
+        public string BSID { get; set; } = "-1";
 
     }
 
@@ -44,7 +44,7 @@ namespace MyMongoApp.Models
         /// <summary>
         /// mainly for name
         /// </summary>
-        public string NameOrNumber { get; set; }
+        public string NameOrNumber { get; set; } = string.Empty;
 
         /// <summary>
         /// business address
