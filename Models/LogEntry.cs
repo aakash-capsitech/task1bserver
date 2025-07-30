@@ -1,6 +1,10 @@
+
+
 using MongoDB.Bson;
 
-
+/// <summary>
+/// placeholder for future use
+/// </summary>
 public class LogEntry
 {
     public string Id { get; set; } = ObjectId.GenerateNewId().ToString();
