@@ -14,6 +14,7 @@ namespace MyApp.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class BusinessesController : ControllerBase
     {
         private readonly MongoDbContext _context;
@@ -32,61 +33,68 @@ namespace MyApp.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateBusiness([FromBody] BusinessDto dto)
         {
-            var contact = new ContactDetails
+            try
             {
-                FirstName = dto.Contact.FirstName,
-                LastName = dto.Contact.LastName,
-                Alias = dto.Contact.Alias,
-                Designation = dto.Contact.Designation,
-                Mode = Enum.TryParse<ContactMode>(dto.Contact.Mode, true, out var mode) ? mode : ContactMode.Unknown,
-                Notes = dto.Contact.Notes,
-                PhoneNumbers = dto.Contact.PhoneNumbers
+                var contact = new ContactDetails
+                {
+                    FirstName = dto.Contact.FirstName,
+                    LastName = dto.Contact.LastName,
+                    Alias = dto.Contact.Alias,
+                    Designation = dto.Contact.Designation,
+                    Mode = Enum.TryParse<ContactMode>(dto.Contact.Mode, true, out var mode) ? mode : ContactMode.Unknown,
+                    Notes = dto.Contact.Notes,
+                    PhoneNumbers = dto.Contact.PhoneNumbers
                     .Where(p => p != null)
                     .Select(p => new PhoneEntry
                     {
                         Value = p.Value,
                         Type = Enum.TryParse<ContactType>(p.Type, true, out var pType) ? pType : ContactType.Unknown
                     }).ToList(),
-                Emails = dto.Contact.Emails
+                    Emails = dto.Contact.Emails
                     .Where(e => e != null)
                     .Select(e => new EmailEntry
                     {
                         Value = e.Value,
                         Type = Enum.TryParse<ContactType>(e.Type, true, out var eType) ? eType : ContactType.Unknown
                     }).ToList(),
-            };
+                };
 
-            await _context.Contacts.InsertOneAsync(contact);
-            var contactId = contact.Id;
+                await _context.Contacts.InsertOneAsync(contact);
+                var contactId = contact.Id;
 
-            var bsid = await GenerateBSID();
+                var bsid = await GenerateBSID();
 
-            var businessEntities = dto.Businesses
-                .Where(b => b != null)
-                .Select(b => new Business
-                {
-                    BusinessE = new BusinessEntry
+                var businessEntities = dto.Businesses
+                    .Where(b => b != null)
+                    .Select(b => new Business
                     {
-                        Type = Enum.TryParse<BusinessType>(b.Type, true, out var bt) ? bt : BusinessType.Unknown,
-                        NameOrNumber = b.NameOrNumber,
-                        Address = b.Address == null ? null : new Address
+                        BusinessE = new BusinessEntry
                         {
-                            Building = b.Address.Building,
-                            Street = b.Address.Street,
-                            City = b.Address.City,
-                            County = b.Address.County,
-                            Postcode = b.Address.Postcode,
-                            Country = b.Address.Country
-                        }
-                    },
-                    ContactId = contactId,
-                    BSID = bsid
-                });
+                            Type = Enum.TryParse<BusinessType>(b.Type, true, out var bt) ? bt : BusinessType.Unknown,
+                            NameOrNumber = b.NameOrNumber,
+                            Address = b.Address == null ? null : new Address
+                            {
+                                Building = b.Address.Building,
+                                Street = b.Address.Street,
+                                City = b.Address.City,
+                                County = b.Address.County,
+                                Postcode = b.Address.Postcode,
+                                Country = b.Address.Country
+                            }
+                        },
+                        ContactId = contactId,
+                        BSID = bsid
+                    });
 
-            await _context.Businesses.InsertManyAsync(businessEntities);
+                await _context.Businesses.InsertManyAsync(businessEntities);
 
 
-            return Ok();
+                return Ok();
+            }
+            catch
+            {
+                return BadRequest("something went wrong");
+            }
         }
 
 
@@ -99,69 +107,75 @@ namespace MyApp.Controllers
         /// <param name="type"></param>
         /// <returns></returns>
         [HttpGet]
-        [Authorize]
         public async Task<IActionResult> GetAll(
         int page = 1,
         int pageSize = 10,
         string? search = null,
         string? type = null)
         {
-            var filterBuilder = Builders<Business>.Filter;
-            var filters = new List<FilterDefinition<Business>>();
-
-            if (!string.IsNullOrEmpty(search))
+            try
             {
-                var regex = new BsonRegularExpression(search, "i");
-                filters.Add(filterBuilder.Regex("BusinessE.NameOrNumber", regex));
-            }
+                var filterBuilder = Builders<Business>.Filter;
+                var filters = new List<FilterDefinition<Business>>();
 
-            if (!string.IsNullOrEmpty(type) &&
-                Enum.TryParse(type, true, out BusinessType parsedType))
-            {
-                filters.Add(filterBuilder.Eq("BusinessE.Type", parsedType));
-            }
-
-            var finalFilter = filters.Any()
-                ? filterBuilder.And(filters)
-                : FilterDefinition<Business>.Empty;
-
-            var total = await _context.Businesses.CountDocumentsAsync(finalFilter);
-
-            var businesses = await _context.Businesses
-                .Find(finalFilter)
-                .Skip((page - 1) * pageSize)
-                .Limit(pageSize)
-                .ToListAsync();
-
-            var contactIds = businesses
-                .Where(b => b.ContactId != null)
-                .Select(b => b.ContactId)
-                .Distinct()
-                .ToList();
-
-            var contacts = await _context.Contacts
-                .Find(Builders<ContactDetails>.Filter.In(c => c.Id, contactIds))
-                .ToListAsync();
-
-            var contactMap = contacts.ToDictionary(c => c.Id, c => c);
-
-            var enrichedBusinesses = businesses.Select(b =>
-            {
-                var contactId = b.ContactId;
-                var contact = contactId != null && contactMap.ContainsKey(contactId)
-                    ? contactMap[contactId]
-                    : null;
-
-                return new
+                if (!string.IsNullOrEmpty(search))
                 {
-                    id = b.Id,
-                    businessE = b.BusinessE,
-                    contact,
-                    BSID = b.BSID
-                };
-            });
+                    var regex = new BsonRegularExpression(search, "i");
+                    filters.Add(filterBuilder.Regex("BusinessE.NameOrNumber", regex));
+                }
 
-            return Ok(new { total, businesses = enrichedBusinesses });
+                if (!string.IsNullOrEmpty(type) &&
+                    Enum.TryParse(type, true, out BusinessType parsedType))
+                {
+                    filters.Add(filterBuilder.Eq("BusinessE.Type", parsedType));
+                }
+
+                var finalFilter = filters.Any()
+                    ? filterBuilder.And(filters)
+                    : FilterDefinition<Business>.Empty;
+
+                var total = await _context.Businesses.CountDocumentsAsync(finalFilter);
+
+                var businesses = await _context.Businesses
+                    .Find(finalFilter)
+                    .Skip((page - 1) * pageSize)
+                    .Limit(pageSize)
+                    .ToListAsync();
+
+                var contactIds = businesses
+                    .Where(b => b.ContactId != null)
+                    .Select(b => b.ContactId)
+                    .Distinct()
+                    .ToList();
+
+                var contacts = await _context.Contacts
+                    .Find(Builders<ContactDetails>.Filter.In(c => c.Id, contactIds))
+                    .ToListAsync();
+
+                var contactMap = contacts.ToDictionary(c => c.Id, c => c);
+
+                var enrichedBusinesses = businesses.Select(b =>
+                {
+                    var contactId = b.ContactId;
+                    var contact = contactId != null && contactMap.ContainsKey(contactId)
+                        ? contactMap[contactId]
+                        : null;
+
+                    return new
+                    {
+                        id = b.Id,
+                        businessE = b.BusinessE,
+                        contact,
+                        BSID = b.BSID
+                    };
+                });
+
+                return Ok(new { total, businesses = enrichedBusinesses });
+            }
+            catch
+            {
+                return BadRequest("something went wrong");
+            }
         }
 
         /// <summary>
@@ -170,25 +184,32 @@ namespace MyApp.Controllers
         /// <returns></returns>
         public async Task<string> GenerateBSID()
         {
-            var lastBusiness = await _context.Businesses.Find(Builders<Business>.Filter.Empty)
+            try
+            {
+                var lastBusiness = await _context.Businesses.Find(Builders<Business>.Filter.Empty)
                 .SortByDescending(b => b.BSID)
                 .Limit(1)
                 .FirstOrDefaultAsync();
 
-            int nextNumber = 1;
+                int nextNumber = 1;
 
-            if(lastBusiness != null && !string.IsNullOrEmpty(lastBusiness.BSID))
-            {
-                var numericPart = lastBusiness.BSID.Replace("B-", "");
-                if(int.TryParse(numericPart, out int lastNumber))
+                if (lastBusiness != null && !string.IsNullOrEmpty(lastBusiness.BSID))
                 {
-                    nextNumber = lastNumber + 1;
+                    var numericPart = lastBusiness.BSID.Replace("B-", "");
+                    if (int.TryParse(numericPart, out int lastNumber))
+                    {
+                        nextNumber = lastNumber + 1;
+                    }
                 }
+
+                string newBSID = $"B-{nextNumber:D3}";
+
+                return newBSID;
             }
-
-            string newBSID = $"B-{nextNumber:D3}";
-
-            return newBSID;
+            catch
+            {
+                return "-1";
+            }
         }
     }
 }

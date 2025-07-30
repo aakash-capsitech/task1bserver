@@ -10,6 +10,7 @@ namespace MyMongoApp.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class QuotesController : ControllerBase
     {
         private readonly MongoDbContext _context;
@@ -27,30 +28,37 @@ namespace MyMongoApp.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateQuote([FromBody] QuoteDto dto)
         {
-
-            var qsid = await GenerateQSID();
-            var quote = new Quote
+            try
             {
-                BusinessId = dto.BusinessId,
-                Date = dto.Date,
-                FirstResponseTeam = dto.FirstResponseTeam,
-                Services = dto.Services.Select(s => new ServiceLine
+                var qsid = await GenerateQSID();
+                var quote = new Quote
                 {
-                    Service = s.Service,
-                    Description = s.Description,
-                    Amount = s.Amount
-                }).ToList(),
+                    BusinessId = dto.BusinessId,
+                    Date = dto.Date,
+                    FirstResponseTeam = dto.FirstResponseTeam,
+                    Services = dto.Services.Select(s => new ServiceLine
+                    {
+                        Service = s.Service,
+                        Description = s.Description,
+                        Amount = s.Amount
+                    }).ToList(),
 
-                DiscountPercentage = dto.DiscountPercentage,
-                VatPercentage = dto.VatPercentage,
-                Subtotal = dto.Subtotal,
-                VatAmount = dto.VatAmount,
-                Total = dto.Total,
-                QSID = qsid
-            };
+                    DiscountPercentage = dto.DiscountPercentage,
+                    VatPercentage = dto.VatPercentage,
+                    Subtotal = dto.Subtotal,
+                    VatAmount = dto.VatAmount,
+                    Total = dto.Total,
+                    QSID = qsid
+                };
 
-            await _context.Quotes.InsertOneAsync(quote);
-            return Ok(quote.Id);
+                await _context.Quotes.InsertOneAsync(quote);
+                return Ok(quote.Id);
+            }
+            catch
+            {
+                return BadRequest("something went wrong");
+            }
+            
         }
 
 
@@ -62,36 +70,43 @@ namespace MyMongoApp.Controllers
         [HttpPost("calc")]
         public IActionResult CalculateQuote([FromBody] JsonElement request)
         {
-            var servicesElement = request.GetProperty("services");
-            var discountPercentage = request.GetProperty("discountPercentage").GetDecimal();
-            var vatPercentage = request.GetProperty("vatPercentage").GetDecimal();
-
-            decimal subtotal = 0m;
-
-            foreach (var service in servicesElement.EnumerateArray())
+            try
             {
-                if (service.TryGetProperty("amount", out var amountProperty) &&
-                    amountProperty.TryGetDecimal(out var amount))
+                var servicesElement = request.GetProperty("services");
+                var discountPercentage = request.GetProperty("discountPercentage").GetDecimal();
+                var vatPercentage = request.GetProperty("vatPercentage").GetDecimal();
+
+                decimal subtotal = 0m;
+
+                foreach (var service in servicesElement.EnumerateArray())
                 {
-                    subtotal += amount;
+                    if (service.TryGetProperty("amount", out var amountProperty) &&
+                        amountProperty.TryGetDecimal(out var amount))
+                    {
+                        subtotal += amount;
+                    }
                 }
+
+                var discountAmount = subtotal * (discountPercentage / 100);
+
+                var vatAmount = (subtotal - discountAmount) * (vatPercentage / 100);
+
+                var total = subtotal - discountAmount + vatAmount;
+
+                var result = new
+                {
+                    Subtotal = Math.Round(subtotal, 2),
+                    DiscountAmount = Math.Round(discountAmount, 2),
+                    VatAmount = Math.Round(vatAmount, 2),
+                    Total = Math.Round(total, 2)
+                };
+
+                return Ok(result);
             }
-
-            var discountAmount = subtotal * (discountPercentage / 100);
-
-            var vatAmount = (subtotal - discountAmount) * (vatPercentage / 100);
-
-            var total = subtotal - discountAmount + vatAmount;
-
-            var result = new
+            catch
             {
-                Subtotal = Math.Round(subtotal, 2),
-                DiscountAmount = Math.Round(discountAmount, 2),
-                VatAmount = Math.Round(vatAmount, 2),
-                Total = Math.Round(total, 2)
-            };
-
-            return Ok(result);
+                return BadRequest("someth9ng went wrong");
+            }
         }
 
         /// <summary>
@@ -103,80 +118,86 @@ namespace MyMongoApp.Controllers
         /// <param name="team"></param>
         /// <returns></returns>
         [HttpGet]
-        [Authorize]
         public async Task<IActionResult> GetAll(
             int page = 1,
             int pageSize = 10,
             string? search = null,
             string? team = null)
         {
-            var quoteFilter = Builders<Quote>.Filter.Empty;
-            var filters = new List<FilterDefinition<Quote>>();
-
-            if (!string.IsNullOrWhiteSpace(team))
+            try
             {
-                filters.Add(Builders<Quote>.Filter.Eq(q => q.FirstResponseTeam, team));
-            }
+                var quoteFilter = Builders<Quote>.Filter.Empty;
+                var filters = new List<FilterDefinition<Quote>>();
 
-            if (filters.Count > 0)
-                quoteFilter = Builders<Quote>.Filter.And(filters);
+                if (!string.IsNullOrWhiteSpace(team))
+                {
+                    filters.Add(Builders<Quote>.Filter.Eq(q => q.FirstResponseTeam, team));
+                }
 
-            var quotes = await _context.Quotes
-                .Find(quoteFilter)
-                .Skip((page - 1) * pageSize)
-                .Limit(pageSize)
-                .ToListAsync();
+                if (filters.Count > 0)
+                    quoteFilter = Builders<Quote>.Filter.And(filters);
 
-            var total = await _context.Quotes.CountDocumentsAsync(quoteFilter);
+                var quotes = await _context.Quotes
+                    .Find(quoteFilter)
+                    .Skip((page - 1) * pageSize)
+                    .Limit(pageSize)
+                    .ToListAsync();
 
-            var businessIds = quotes
-                .Select(q => q.BusinessId)
-                .Where(id => !string.IsNullOrEmpty(id))
-                .Distinct()
-                .ToList();
+                var total = await _context.Quotes.CountDocumentsAsync(quoteFilter);
 
-            var businesses = await _context.Businesses
-                .Find(b => businessIds.Contains(b.Id))
-                .ToListAsync();
+                var businessIds = quotes
+                    .Select(q => q.BusinessId)
+                    .Where(id => !string.IsNullOrEmpty(id))
+                    .Distinct()
+                    .ToList();
 
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                var searchLower = search.ToLower();
+                var businesses = await _context.Businesses
+                    .Find(b => businessIds.Contains(b.Id))
+                    .ToListAsync();
 
-                quotes = quotes.Where(q =>
+                if (!string.IsNullOrWhiteSpace(search))
+                {
+                    var searchLower = search.ToLower();
+
+                    quotes = quotes.Where(q =>
+                    {
+                        var business = businesses.FirstOrDefault(b => b.Id == q.BusinessId);
+                        var nameOrNumber = business?.BusinessE?.NameOrNumber?.ToLower();
+                        return nameOrNumber != null && nameOrNumber.Contains(searchLower);
+                    }).ToList();
+                }
+
+                var result = quotes.Select(q =>
                 {
                     var business = businesses.FirstOrDefault(b => b.Id == q.BusinessId);
-                    var nameOrNumber = business?.BusinessE?.NameOrNumber?.ToLower();
-                    return nameOrNumber != null && nameOrNumber.Contains(searchLower);
+                    var businessName = business?.BusinessE?.NameOrNumber ?? "(Deleted)";
+
+                    return new
+                    {
+                        q.Id,
+                        BusinessName = businessName,
+                        q.FirstResponseTeam,
+                        q.Date,
+                        q.DiscountPercentage,
+                        q.VatPercentage,
+                        q.Subtotal,
+                        q.VatAmount,
+                        q.Total,
+                        q.Services,
+                        q.QSID
+                    };
                 }).ToList();
-            }
 
-            var result = quotes.Select(q =>
-            {
-                var business = businesses.FirstOrDefault(b => b.Id == q.BusinessId);
-                var businessName = business?.BusinessE?.NameOrNumber ?? "(Deleted)";
-
-                return new
+                return Ok(new
                 {
-                    q.Id,
-                    BusinessName = businessName,
-                    q.FirstResponseTeam,
-                    q.Date,
-                    q.DiscountPercentage,
-                    q.VatPercentage,
-                    q.Subtotal,
-                    q.VatAmount,
-                    q.Total,
-                    q.Services,
-                    q.QSID
-                };
-            }).ToList();
-
-            return Ok(new
+                    total,
+                    quotes = result
+                });
+            }
+           catch
             {
-                total,
-                quotes = result
-            });
+                return BadRequest("something went wrong");
+            }
         }
 
         /// <summary>
@@ -185,25 +206,32 @@ namespace MyMongoApp.Controllers
         /// <returns></returns>
         public async Task<string> GenerateQSID()
         {
-            var lastQuote = await _context.Quotes.Find(Builders<Quote>.Filter.Empty)
+            try
+            {
+                var lastQuote = await _context.Quotes.Find(Builders<Quote>.Filter.Empty)
                 .SortByDescending(q => q.QSID)
                 .Limit(1)
                 .FirstOrDefaultAsync();
 
-            int nextNumber = 1;
+                int nextNumber = 1;
 
-            if (lastQuote != null && !string.IsNullOrEmpty(lastQuote.QSID))
-            {
-                var numericPart = lastQuote.QSID.Replace("Q-", "");
-                if (int.TryParse(numericPart, out int lastNumber))
+                if (lastQuote != null && !string.IsNullOrEmpty(lastQuote.QSID))
                 {
-                    nextNumber = lastNumber + 1;
+                    var numericPart = lastQuote.QSID.Replace("Q-", "");
+                    if (int.TryParse(numericPart, out int lastNumber))
+                    {
+                        nextNumber = lastNumber + 1;
+                    }
                 }
+
+                string newQSID = $"Q-{nextNumber:D3}";
+
+                return newQSID;
             }
-
-            string newQSID = $"Q-{nextNumber:D3}";
-
-            return newQSID;
+            catch
+            {
+                return "-1";
+            }
         }
     }
 }

@@ -36,55 +36,62 @@ namespace MyMongoApp.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login(LoginRequest request)
         {
-            var user = await _users.Find(u => u.Email == request.Email).FirstOrDefaultAsync();
-            if (user == null)
-                return Unauthorized("Invalid credentials.");
-
-            var now = DateTime.UtcNow;
-
-            var isDenied = await _loginRules.Find(r =>
-                r.UserId == user.Id &&
-                r.Restriction == LoginRulesRestriction.Deny &&
-                (r.FromDate == null || r.FromDate <= now) &&
-                (r.ToDate == null || r.ToDate >= now)
-            ).AnyAsync();
-
-
-
-            if (isDenied)
+            try
             {
-                return Unauthorized("Login Denied, contact Admin.");
-            }
+                var user = await _users.Find(u => u.Email == request.Email).FirstOrDefaultAsync();
+                if (user == null)
+                    return Unauthorized("Invalid credentials.");
 
-            bool isFirstTimeUser = user.Logins == 0 && user.PasswordHash == "12345";
+                var now = DateTime.UtcNow;
 
-            bool isValidPassword = isFirstTimeUser
-                ? request.Password == "12345"
-                : BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
+                var isDenied = await _loginRules.Find(r =>
+                    r.UserId == user.Id &&
+                    r.Restriction == LoginRulesRestriction.Deny &&
+                    (r.FromDate == null || r.FromDate <= now) &&
+                    (r.ToDate == null || r.ToDate >= now)
+                ).AnyAsync();
 
-            if (!isValidPassword)
-                return Unauthorized("Invalid credentials.");
 
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_config["Jwt:Key"] ?? "supersecretkey123");
 
-            var tokenDescriptor = new SecurityTokenDescriptor
-            {
-                Subject = new ClaimsIdentity(new[]
+                if (isDenied)
                 {
+                    return Unauthorized("Login Denied, contact Admin.");
+                }
+
+                bool isFirstTimeUser = user.Logins == 0 && user.PasswordHash == "12345";
+
+                bool isValidPassword = isFirstTimeUser
+                    ? request.Password == "12345"
+                    : BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
+
+                if (!isValidPassword)
+                    return Unauthorized("Invalid credentials.");
+
+                var tokenHandler = new JwtSecurityTokenHandler();
+                var key = Encoding.ASCII.GetBytes(_config["Jwt:Key"] ?? "supersecretkey123");
+
+                var tokenDescriptor = new SecurityTokenDescriptor
+                {
+                    Subject = new ClaimsIdentity(new[]
+                    {
                     new Claim(ClaimTypes.Email, user.Email),
                     new Claim(ClaimTypes.NameIdentifier, user.Id),
                     new Claim(ClaimTypes.Role, user.Role.ToString()), // ✅ FIXED: Convert enum to string
                 }),
-                Expires = DateTime.UtcNow.AddHours(100),
-                SigningCredentials = new SigningCredentials(
-                    new SymmetricSecurityKey(key),
-                    SecurityAlgorithms.HmacSha256Signature
-                )
-            };
+                    Expires = DateTime.UtcNow.AddHours(100),
+                    SigningCredentials = new SigningCredentials(
+                        new SymmetricSecurityKey(key),
+                        SecurityAlgorithms.HmacSha256Signature
+                    )
+                };
 
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            return Ok(new { token = tokenHandler.WriteToken(token) });
+                var token = tokenHandler.CreateToken(tokenDescriptor);
+                return Ok(new { token = tokenHandler.WriteToken(token) });
+            }
+            catch
+            {
+                return BadRequest("something went wrong");
+            }
         }
     }
 }

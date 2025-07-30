@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -10,6 +11,7 @@ namespace MyMongoApp.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class LoginRulesController : ControllerBase
     {
         private readonly MongoDbContext _context;
@@ -37,6 +39,8 @@ namespace MyMongoApp.Controllers
         int page = 1,
         int pageSize = 10,
         string? search = null)
+            {
+            try
             {
                 var rules = await _context.LoginRules.Find(_ => true).ToListAsync();
 
@@ -75,6 +79,11 @@ namespace MyMongoApp.Controllers
                     rules = paginated
                 });
             }
+                catch
+            {
+                return BadRequest("something went wrong");
+            }
+            }
 
         /// <summary>
         /// Create Login Rules
@@ -84,43 +93,50 @@ namespace MyMongoApp.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateLoginRuleDto dto)
         {
-            if (string.IsNullOrWhiteSpace(dto.UserId))
-                return BadRequest("At least one user must be selected.");
-
-            var user = await _context.Users.Find(u => u.Id == dto.UserId).FirstOrDefaultAsync();
-            if (user == null)
-                return NotFound("User not found.");
-
-            var rule = new LoginRule
+           try
             {
-                Id = ObjectId.GenerateNewId().ToString(),
-                UserId = dto.UserId,
-                Restriction = dto.Restriction,
-                FromDate = dto.FromDate,
-                ToDate = dto.ToDate
-            };
+                if (string.IsNullOrWhiteSpace(dto.UserId))
+                    return BadRequest("At least one user must be selected.");
 
-            await _context.LoginRules.InsertOneAsync(rule);
+                var user = await _context.Users.Find(u => u.Id == dto.UserId).FirstOrDefaultAsync();
+                if (user == null)
+                    return NotFound("User not found.");
 
-            var log = new AuditLog
-            {
-                EntityType = AuditLogEntity.LoginRule,
-                EntityId = rule.Id,
-                Target = new IdNameModel { Id = rule.Id, Name = user.Email },
-                Action = "Created",
-                PerformedBy = new CreatedBy
+                var rule = new LoginRule
                 {
-                    Id = user.Id,
-                    Name = user.Name,
+                    Id = ObjectId.GenerateNewId().ToString(),
+                    UserId = dto.UserId,
+                    Restriction = dto.Restriction,
+                    FromDate = dto.FromDate,
+                    ToDate = dto.ToDate
+                };
+
+                await _context.LoginRules.InsertOneAsync(rule);
+
+                var log = new AuditLog
+                {
+                    EntityType = AuditLogEntity.LoginRule,
+                    EntityId = rule.Id,
+                    Target = new IdNameModel { Id = rule.Id, Name = user.Email },
+                    Action = "Created",
+                    PerformedBy = new CreatedBy
+                    {
+                        Id = user.Id,
+                        Name = user.Name,
+                        Timestamp = DateTime.UtcNow
+                    },
+                    Description = $"Created login rule for user {user.Email} with restriction {rule.Restriction}",
                     Timestamp = DateTime.UtcNow
-                },
-                Description = $"Created login rule for user {user.Email} with restriction {rule.Restriction}",
-                Timestamp = DateTime.UtcNow
-            };
+                };
 
-            await _context.AuditLogs.InsertOneAsync(log);
+                await _context.AuditLogs.InsertOneAsync(log);
 
-            return Ok(rule);
+                return Ok(rule);
+            }
+            catch
+            {
+                return BadRequest("something went wrong");
+            }
         }
 
 
@@ -130,26 +146,33 @@ namespace MyMongoApp.Controllers
         /// <param name="id"></param>
         /// <param name="dto"></param>
         /// <returns></returns>
-        [HttpPut("{id}")]
+        [HttpPost("{id}")]
         public async Task<IActionResult> Update(string id, [FromBody] CreateLoginRuleDto dto)
         {
-            if (dto.UserId == null)
-                return BadRequest("Update must target exactly one user per rule.");
+            try
+            {
+                if (dto.UserId == null)
+                    return BadRequest("Update must target exactly one user per rule.");
 
-            var update = Builders<LoginRule>.Update
-                .Set(r => r.UserId, dto.UserId)
-                .Set(r => r.Restriction, dto.Restriction)
-                .Set(r => r.FromDate, dto.FromDate)
-                .Set(r => r.ToDate, dto.ToDate);
+                var update = Builders<LoginRule>.Update
+                    .Set(r => r.UserId, dto.UserId)
+                    .Set(r => r.Restriction, dto.Restriction)
+                    .Set(r => r.FromDate, dto.FromDate)
+                    .Set(r => r.ToDate, dto.ToDate);
 
-            var result = await _context.LoginRules.UpdateOneAsync(r => r.Id == id, update);
+                var result = await _context.LoginRules.UpdateOneAsync(r => r.Id == id, update);
 
-            if (result.MatchedCount == 0)
-                return NotFound();
+                if (result.MatchedCount == 0)
+                    return NotFound();
 
-            await LogAudit("Updated", id, $"Updated login rule for user {dto.UserId} with restriction {dto.Restriction}");
+                await LogAudit("Updated", id, $"Updated login rule for user {dto.UserId} with restriction {dto.Restriction}");
 
-            return NoContent();
+                return NoContent();
+            }
+            catch
+            {
+                return BadRequest("something went wrong");
+            }
         }
 
         /// <summary>
@@ -157,16 +180,23 @@ namespace MyMongoApp.Controllers
         /// </summary>
         /// <param name="id"></param>
         /// <returns></returns>
-        [HttpDelete("{id}")]
+        [HttpPost("/delete/{id}")]
         public async Task<IActionResult> Delete(string id)
         {
-            var result = await _context.LoginRules.DeleteOneAsync(r => r.Id == id);
-            if (result.DeletedCount == 0)
-                return NotFound();
+            try
+            {
+                var result = await _context.LoginRules.DeleteOneAsync(r => r.Id == id);
+                if (result.DeletedCount == 0)
+                    return NotFound();
 
-            await LogAudit("Deleted", id, $"Deleted login rule with ID {id}");
+                await LogAudit("Deleted", id, $"Deleted login rule with ID {id}");
 
-            return NoContent();
+                return NoContent();
+            }
+            catch
+            {
+                return BadRequest("something went wrong");
+            }
         }
 
         /// <summary>
@@ -177,12 +207,19 @@ namespace MyMongoApp.Controllers
         [HttpGet("{id}/history")]
         public async Task<IActionResult> GetHistory(string id)
         {
-            var logs = await _context.AuditLogs
+            try
+            {
+                var logs = await _context.AuditLogs
                 .Find(log => log.EntityId == id)
                 .SortByDescending(log => log.Timestamp)
                 .ToListAsync();
 
-            return Ok(logs);
+                return Ok(logs);
+            }
+            catch
+            {
+                return BadRequest("something went wrong");
+            }
         }
 
         /// <summary>
@@ -194,16 +231,23 @@ namespace MyMongoApp.Controllers
         /// <returns></returns>
         private async Task LogAudit(string action, string entityId, string description)
         {
-            var log = new AuditLog
+            try
             {
-                Id = MongoDB.Bson.ObjectId.GenerateNewId().ToString(), 
-                Action = action,
-                EntityId = entityId,
-                Description = description,
-                Timestamp = DateTime.UtcNow
-            };
+                var log = new AuditLog
+                {
+                    Id = MongoDB.Bson.ObjectId.GenerateNewId().ToString(),
+                    Action = action,
+                    EntityId = entityId,
+                    Description = description,
+                    Timestamp = DateTime.UtcNow
+                };
 
-            await _context.AuditLogs.InsertOneAsync(log);
+                await _context.AuditLogs.InsertOneAsync(log);
+            }
+            catch
+            {
+                
+            }
         }
     }
 }

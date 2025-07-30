@@ -13,7 +13,6 @@ namespace MyMongoApp.Data
             _database = client.GetDatabase("MyMongoAppDb");
         }
 
-        // Main app users
         public IMongoCollection<User> Users => _database.GetCollection<User>("Users");
 
         public IMongoCollection<LogEntry> Logs => _database.GetCollection<LogEntry>("Logs");
